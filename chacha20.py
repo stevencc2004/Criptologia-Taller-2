@@ -67,6 +67,7 @@ def chacha20_encrypt_decrypt(message, key, nonce, initial_counter=1, show_rounds
     padded_msg = message + bytes([0] * (padded_len - len(message)))
     
     ciphertext = bytearray()
+    full_keystream = bytearray()
     counter = initial_counter
     
     for i in range(0, len(padded_msg), 64):
@@ -77,6 +78,7 @@ def chacha20_encrypt_decrypt(message, key, nonce, initial_counter=1, show_rounds
             block = chacha20_block(key, counter, nonce, show_rounds=False)
             
         keystream = serialize_block(block)
+        full_keystream.extend(keystream)
         
         # XOR bit a bit (byte a byte)
         for j in range(64):
@@ -85,7 +87,7 @@ def chacha20_encrypt_decrypt(message, key, nonce, initial_counter=1, show_rounds
         
         counter += 1
         
-    return bytes(ciphertext), counter, padded_msg
+    return bytes(ciphertext), counter, padded_msg, bytes(full_keystream)
 
 # --- EJECUCIÓN DE PRUEBAS PARA EL INFORME ---
 if __name__ == "__main__":
@@ -99,44 +101,69 @@ if __name__ == "__main__":
     print(f"Estado Inicial QR: a={a:08x}, b={b:08x}, c={c:08x}, d={d:08x}")
     a, b, c, d = qr(a, b, c, d)
     print(f"Resultado QR: a={a:08x}, b={b:08x}, c={c:08x}, d={d:08x}")
-    print("Esperado:      e4e7f110 23456789 56789012 89012345")
+    print("Esperado:     a=ea2a92f4, b=cb1cf8ce, c=4581472e, d=5881c4bb")
 
     # 2. Prueba de cifrado
     print("\n[+] Prueba 2: Cifrar mensaje")
     msg1 = "Este mensaje de prueba será cifrado con ChaCha20, un algoritmo de flujo rápido y seguro que usa una clave de 256 bits ahora.".encode('utf-8')
     key1 = bytes.fromhex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
     nonce1 = bytes.fromhex("000000090000004a00000000")
-    
-    ct1, final_counter1, padded_msg1 = chacha20_encrypt_decrypt(msg1, key1, nonce1, initial_counter=1, show_rounds=True)
+    ct1, final_counter1, padded_msg1, ks1 = chacha20_encrypt_decrypt(msg1, key1, nonce1, initial_counter=1, show_rounds=True)
     print(f"\nClave: {key1.hex()}")
-    print(f"Nonce Final: {nonce1.hex()} (Contador final: {final_counter1})")
     print(f"Texto Plano (hex): {padded_msg1.hex()}")
+    print(f"Palabra Cifrante (hex): {ks1.hex()}")
     print(f"Texto Cifrado (hex): {ct1.hex()}")
+    print(f"Nonce Final: {nonce1.hex()} (Contador final: {final_counter1})")
 
     # 3. Cambio de Nonce
     print("\n[+] Prueba 3: Cifrar mensaje (Cambio de Nonce)")
     nonce2 = bytes.fromhex("010000090000004a00000000")
-    ct2, final_counter2, _ = chacha20_encrypt_decrypt(msg1, key1, nonce2, initial_counter=1, show_rounds=True)
+    ct2, final_counter2, _, ks2 = chacha20_encrypt_decrypt(msg1, key1, nonce2, initial_counter=1, show_rounds=True)
     print(f"\nNonce Modificado: {nonce2.hex()}")
+    print(f"Palabra Cifrante (hex): {ks2.hex()}")
     print(f"Texto Cifrado (hex): {ct2.hex()}")
-    print("\nRespuesta: Se puede observar que desde la Ronda 1 (la primera ronda impar), las variables de la matriz de estado cambian drásticamente debido a la difusión de la función Quarter Round, ya que el nonce forma parte del estado inicial.")
+    print(f"Nonce Final: {nonce2.hex()} (Contador final: {final_counter2})")
 
     # 4. Cambio de Clave
     print("\n[+] Prueba 4: Cifrar mensaje (Cambio de 1 bit en Clave)")
     key3 = bytes.fromhex("010102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
-    ct3, final_counter3, _ = chacha20_encrypt_decrypt(msg1, key3, nonce1, initial_counter=1, show_rounds=True)
+    ct3, final_counter3, _, ks3 = chacha20_encrypt_decrypt(msg1, key3, nonce1, initial_counter=1, show_rounds=True)
     print(f"\nClave Modificada: {key3.hex()}")
+    print(f"Palabra Cifrante (hex): {ks3.hex()}")
     print(f"Texto Cifrado (hex): {ct3.hex()}")
+    print(f"Nonce Final: {nonce1.hex()} (Contador final: {final_counter3})")
     diff_bits = sum(bin(b1 ^ b3).count('1') for b1, b3 in zip(ct1, ct3))
-    print(f"\nRespuesta: Al igual que con el Nonce, al cambiar un bit de la clave, los cambios en las matrices se observan desde la Ronda 1.")
-    print(f"¿Tienen los dos mensajes cifrados algún parecido?: No tienen parecido estadístico. Se diferencian en {diff_bits} bits de {len(ct1)*8} bits ({diff_bits/(len(ct1)*8)*100:.2f}% de diferencia, cumple el efecto avalancha estricto del 50%).")
 
     # 5. Cambio de Mensaje
     print("\n[+] Prueba 5: Cifrar mensaje (Cambio de 1 bit en Mensaje)")
     msg4 = "Este mensaje de prueba será cifrado con ChaCha21, un algoritmo de flujo rápido y seguro que usa una clave de 256 bits ahora.".encode('utf-8')
-    ct4, final_counter4, padded_msg4 = chacha20_encrypt_decrypt(msg4, key1, nonce1, initial_counter=1, show_rounds=False)
+    ct4, final_counter4, padded_msg4, ks4 = chacha20_encrypt_decrypt(msg4, key1, nonce1, initial_counter=1, show_rounds=True)
     print(f"\nMensaje Modificado: {msg4}")
+    print(f"Palabra Cifrante (hex): {ks4.hex()}")
     print(f"Texto Cifrado (hex): {ct4.hex()}")
+    print(f"Nonce Final: {nonce1.hex()} (Contador final: {final_counter4})")
     diff_bits_msg = sum(bin(b1 ^ b4).count('1') for b1, b4 in zip(ct1, ct4))
-    print(f"\nRespuesta: ¿Desde qué ronda se observan cambios importantes en las matrices? R: En los cifradores de flujo convencionales (como ChaCha20), las matrices NO CAMBIAN al modificar el mensaje. Las matrices dependen única y exclusivamente de la Clave, el Nonce y el Contador.")
-    print(f"¿Tienen los dos mensajes cifrados algún parecido?: SÍ, tienen casi total parecido. Dado que el keystream es idéntico, el texto cifrado solo difiere en los bits correspondientes al único caracter modificado. Difirieron en {diff_bits_msg} bits en total (1 bit correspondiente al cambio de dígito).")
+
+    # 6. Descrifrar 
+    # 6.1. El texto cifrado en formato hexadecimal
+    ciphertext_hex = "55829381f1563c7b236eb77a834414e4b7a381a251a148706150693be3b70528a0e3002927fcc5673481bf649ae36390843ebca4b0362fd5acbff181d63d536e6eeda31155a2d521d8be6f119a42ddb9bd2fe3e7cf52688fca9f34ea6f0eea9b86018dfc34d9a7eade5702bc0c586fae69c4da45ef2155203a6ea5452da8af3b"
+    # 6.2. Convertir el hexadecimal a bytes
+    ciphertext_bytes = bytes.fromhex(ciphertext_hex)
+    # 6.3. Las llaves y nonce usados en el punto 5
+    key1 = bytes.fromhex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+    nonce1 = bytes.fromhex("000000090000004a00000000")
+    # 6.4. chacha20_encrypt_decrypt pasando el CIPHERTEXT
+    mensaje_descifrado_bytes, final_counter_dec, _, ks_dec = chacha20_encrypt_decrypt(
+        message=ciphertext_bytes, 
+        key=key1, 
+        nonce=nonce1, 
+        initial_counter=1
+    )
+    print(f"\nPalabra Cifrante (hex): {ks_dec.hex()}")
+    print(f"Texto Cifrado (hex) (Input): {ciphertext_hex}")
+    print(f"Nonce Final: {nonce1.hex()} (Contador final: {final_counter_dec})")
+    
+    # 6.5. se quitan los 0 añadidos
+    mensaje_descifrado_limpio = mensaje_descifrado_bytes.rstrip(b'\x00')
+    # 6.6.
+    print(mensaje_descifrado_limpio.decode('utf-8'))
